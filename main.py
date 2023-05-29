@@ -11,7 +11,7 @@ from data_module import FlyDataModule
 def main(mode = None):
 
     # PATH INFO
-    PROJ_DIR = '/Users/mpekey/Desktop/FlyVideo'
+    PROJ_DIR = '/cta/users/mpekey/FlyVideo'
     TRAIN_DATA_PATH = os.path.join(PROJ_DIR, 'FlyTrainingData', 'Train')
     VAL_DATA_PATH = os.path.join(PROJ_DIR, 'FlyTrainingData', 'Validation')
 
@@ -38,10 +38,10 @@ def main(mode = None):
         # Data
         "train_data_path" : TRAIN_DATA_PATH,
         "val_data_path" : VAL_DATA_PATH,
-        "lr" : 0.1,
-        "weight_decay" : 1e-4,
-        "max_epochs" : 1,
-        "batch_size" : 8,
+        "lr" : 0.01,
+        #"weight_decay" : 1e-4,
+        "max_epochs" : 25,
+        "batch_size" : 16,
         "video_path_prefix" : '',
         "video_min_short_side_scale" : 256,
         "video_max_short_side_scale" : 320,
@@ -57,10 +57,11 @@ def main(mode = None):
         param.requires_grad = False
 
     trainer = pl.Trainer(
-        max_epochs=5,
+        max_epochs=25,
         callbacks=[TQDMProgressBar(refresh_rate=args["batch_size"])],
-        accelerator="auto",
+        accelerator="gpu" if torch.cuda.is_available() else "auto",
         devices=1 if torch.cuda.is_available() else None,
+        log_every_n_steps=40
     )
 
     classification_module = VideoClassificationLightningModule(model, args)

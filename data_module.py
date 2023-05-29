@@ -61,14 +61,16 @@ class FlyDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(
             self.train_dataset,
             batch_size=self.args["batch_size"],
-            shuffle=True
+            shuffle=True,
+            num_workers=8
         )
 
     def val_dataloader(self):
         return torch.utils.data.DataLoader(
             self.val_dataset,
             batch_size=self.args["batch_size"],
-            shuffle=False
+            shuffle=False,
+            num_workers=8
         )
     
 
