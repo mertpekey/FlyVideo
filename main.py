@@ -1,8 +1,10 @@
 import os
 import torch
 import lightning.pytorch as pl
-from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
+from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification, AutoImageProcessor,TimesformerForVideoClassification
 from lightning.pytorch.callbacks.progress import TQDMProgressBar
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+from lightning.pytorch.loggers import TensorBoardLogger
 
 from utils import create_preprocessor_config
 from model import VideoClassificationLightningModule
@@ -16,23 +18,36 @@ def main(mode = None):
     VAL_DATA_PATH = os.path.join(PROJ_DIR, 'FlyTrainingData', 'Validation')
 
     # MODEL INFO
-    MODEL_CHECKPOINT = "MCG-NJU/videomae-base"
+    MODEL_CHECKPOINT = {'videomae':"MCG-NJU/videomae-base",
+                        'timesformer':"facebook/timesformer-base-finetuned-k400"}
 
     # DATASET INFO
     class_labels = ['Feeding', 'Grooming', 'Pumping']
     label2id = {label: i for i, label in enumerate(class_labels)}
     id2label = {i: label for label, i in label2id.items()}
 
-    image_processor = VideoMAEImageProcessor.from_pretrained(MODEL_CHECKPOINT)
+    image_processor = AutoImageProcessor.from_pretrained(MODEL_CHECKPOINT['videomae'])
+
     model = VideoMAEForVideoClassification.from_pretrained(
-        MODEL_CHECKPOINT,
+        MODEL_CHECKPOINT['videomae'],
         label2id=label2id,
         id2label=id2label,
         ignore_mismatched_sizes=True,  # provide this in case you're planning to fine-tune an already fine-tuned checkpoint
         num_frames = 16 # Default is 16
     )
 
-    model_args = create_preprocessor_config(model, image_processor, sample_rate=8, fps=30)
+    
+    model_tformer = TimesformerForVideoClassification.from_pretrained(
+        MODEL_CHECKPOINT['timesformer'],
+        label2id=label2id,
+        id2label=id2label,
+        ignore_mismatched_sizes=True,  # provide this in case you're planning to fine-tune an already fine-tuned checkpoint
+        num_frames = 8 # Default is 8
+    )
+
+    
+
+    model_args = create_preprocessor_config(model_tformer, image_processor, sample_rate=8, fps=30)
 
     args = {
         # Data
@@ -55,16 +70,23 @@ def main(mode = None):
     # Freeze the model
     for param in model.videomae.parameters():
         param.requires_grad = False
+    
+    for param in model_tformer.timesformer.parameters():
+        param.requires_grad = False
+
+    logger = TensorBoardLogger("tb_logs", name="timesformer_logs_s9")
 
     trainer = pl.Trainer(
         max_epochs=25,
-        callbacks=[TQDMProgressBar(refresh_rate=args["batch_size"])],
+        logger=logger,
+        callbacks=[EarlyStopping(monitor='val_loss', patience=4)],
+        #callbacks=[TQDMProgressBar(refresh_rate=args["batch_size"])],
         accelerator="gpu" if torch.cuda.is_available() else "auto",
         devices=1 if torch.cuda.is_available() else None,
         log_every_n_steps=40
     )
 
-    classification_module = VideoClassificationLightningModule(model, args)
+    classification_module = VideoClassificationLightningModule(model_tformer, args)
     data_module = FlyDataModule(args)
 
     if mode is None:

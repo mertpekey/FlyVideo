@@ -30,9 +30,11 @@ class VideoClassificationLightningModule(pl.LightningModule):
         loss = F.cross_entropy(output.logits, y)
         acc = torchmetrics.functional.accuracy(output.logits, y, task="multiclass", num_classes=3)
 
-        self.log(f"{stage}_loss", loss.item(), on_epoch=True, prog_bar=True, batch_size=self.args["batch_size"])
         self.log(
-            f"{stage}_acc", acc, on_epoch=True, prog_bar=True, batch_size=self.args["batch_size"]
+            f"{stage}_loss", loss.item(), batch_size=self.args["batch_size"], on_epoch=True, prog_bar=True
+        )
+        self.log(
+            f"{stage}_acc", acc, batch_size=self.args["batch_size"], on_epoch=True, prog_bar=True
         )
         if stage == 'train':
             return loss
