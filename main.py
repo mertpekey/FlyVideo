@@ -10,7 +10,7 @@ from utils import create_preprocessor_config
 from model import VideoClassificationLightningModule
 from data_module import FlyDataModule
 
-def main(mode = None):
+def main(mode = None, load_model=False):
 
     # PATH INFO
     PROJ_DIR = '/cta/users/mpekey/FlyVideo'
@@ -47,14 +47,13 @@ def main(mode = None):
 
     
 
-    model_args = create_preprocessor_config(model_tformer, image_processor, sample_rate=8, fps=30)
+    model_args = create_preprocessor_config(model_tformer, image_processor, sample_rate=16, fps=30)
 
     args = {
         # Data
         "train_data_path" : TRAIN_DATA_PATH,
         "val_data_path" : VAL_DATA_PATH,
-        "lr" : 0.01,
-        #"weight_decay" : 1e-4,
+        "lr" : 0.001,
         "max_epochs" : 25,
         "batch_size" : 16,
         "video_path_prefix" : '',
@@ -74,19 +73,26 @@ def main(mode = None):
     for param in model_tformer.timesformer.parameters():
         param.requires_grad = False
 
-    logger = TensorBoardLogger("tb_logs", name="timesformer_logs_s9")
+    logger = TensorBoardLogger("tb_logs", name="timesformer_logs_s16_noES_b16_lr1e3")
 
     trainer = pl.Trainer(
         max_epochs=25,
         logger=logger,
-        callbacks=[EarlyStopping(monitor='val_loss', patience=4)],
-        #callbacks=[TQDMProgressBar(refresh_rate=args["batch_size"])],
+        callbacks=[TQDMProgressBar(refresh_rate=args["batch_size"])],
         accelerator="gpu" if torch.cuda.is_available() else "auto",
         devices=1 if torch.cuda.is_available() else None,
         log_every_n_steps=40
     )
 
-    classification_module = VideoClassificationLightningModule(model_tformer, args)
+    if load_model:
+        state_dict_model = torch.load("tb_logs/timesformer_logs_s16_noES_b16_lr1e3/version_0/checkpoints/epoch=24-step=1000.ckpt")['state_dict']
+        for key in list(state_dict_model.keys()):
+            state_dict_model[key.replace('model.', '')] = state_dict_model.pop(key)
+
+        model_tformer.load_state_dict(state_dict_model)
+        classification_module = VideoClassificationLightningModule(model_tformer, args)
+    else:
+        classification_module = VideoClassificationLightningModule(model_tformer, args)
     data_module = FlyDataModule(args)
 
     if mode is None:
@@ -95,7 +101,12 @@ def main(mode = None):
         trainer.fit(classification_module, data_module)
     elif mode == 'test':
         trainer.test(classification_module, data_module)
+    elif mode == 'predict':
+        data_module.setup()
+        classification_module.dataloader_length = len(data_module.val_dataloader())
+        print(classification_module.dataloader_length)
+        trainer.predict(classification_module, data_module.val_dataloader())
 
 
 if __name__ == '__main__':
-    main(mode = 'fit')
+    main(mode = 'predict', load_model=True)

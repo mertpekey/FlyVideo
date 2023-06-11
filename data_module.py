@@ -53,10 +53,6 @@ class FlyDataModule(pl.LightningDataModule):
                 )
         )
 
-        #if stage == 'test' or stage is None:
-        #    self.test_dataset = load_dataset(self.hf_data_ckp, split='test')
-        #    self.test_dataset.set_transform(self._preprocess_imgs)
-
     def train_dataloader(self):
         return torch.utils.data.DataLoader(
             self.train_dataset,
