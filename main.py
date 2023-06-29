@@ -46,7 +46,6 @@ def main(mode = None, load_model=False):
         setattr(args, key, value)
 
 
-
     #logger = TensorBoardLogger("tb_logs", name="timesformer_logs_s16_noES_b16_lr1e3")
     wandb_logger = WandbLogger(project="timesformer-wandb")
 
@@ -81,4 +80,4 @@ def main(mode = None, load_model=False):
 
 
 if __name__ == '__main__':
-    main(mode = 'predict', load_model=True)
+    main(mode = 'fit', load_model=False)

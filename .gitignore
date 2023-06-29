@@ -5,3 +5,7 @@ FlyTrainingData
 __pycache__
 tb_logs
 Figures
+wandb
+timesformer-wandb
+fly_cm.png
+fly_roc.png

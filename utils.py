@@ -19,8 +19,8 @@ def create_preprocessor_config(model, image_processor, sample_rate=8, fps=30):
     print('Clip Duration:', clip_duration, 'seconds')
 
     return {
-        "image_mean" : mean,
-        "image_std" : std,
+        "video_means" : mean,
+        "video_stds" : std,
         "crop_size" : crop_size,
         "num_frames_to_sample" : num_frames_to_sample,
         "clip_duration": clip_duration

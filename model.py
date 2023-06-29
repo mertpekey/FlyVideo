@@ -1,4 +1,5 @@
 import torch
+import torchvision
 import torch.nn.functional as F
 import lightning.pytorch as pl
 import torchmetrics
@@ -18,12 +19,11 @@ class VideoClassificationLightningModule(pl.LightningModule):
         self.dataloader_length = 0
         self.classes = ['Feeding', 'Grooming', 'Pumping']
 
-        self.save_hyperparameters("args.lr", "args.batch_size", "args.max_epochs",
-                                  "args.sample_rate", "args.fps", "args.num_frames")
+        self.save_hyperparameters("args")
         
         # For logging outputs
         self.epoch_logits = []
-        self.epoch_incorrect_samples = []
+        self.epoch_incorrect_samples = set()
 
     def forward(self, x):
         return self.model(x)
@@ -43,39 +43,45 @@ class VideoClassificationLightningModule(pl.LightningModule):
         acc = torchmetrics.functional.accuracy(output.logits, y, task="multiclass", num_classes=3)
 
         self.log(
-            f"{stage}_loss", loss.item(), batch_size=self.args["batch_size"], on_step=False, on_epoch=True, prog_bar=True
+            f"{stage}/loss", loss.item(), batch_size=self.args.batch_size, on_step=False, on_epoch=True, prog_bar=True
         )
         self.log(
-            f"{stage}_acc", acc, batch_size=self.args["batch_size"], on_step=False, on_epoch=True, prog_bar=True
+            f"{stage}/acc", acc, batch_size=self.args.batch_size, on_step=False, on_epoch=True, prog_bar=True
         )
         if stage == 'train':
             return loss
         elif stage == 'val':
-            _, predictions = torch.max(output.logits, dim=1)
-            incorrect_samples = X[predictions != y]  # Get incorrect samples
+            predictions = torch.argmax(output.logits, dim=1)
+            incorrect_indices = torch.nonzero(predictions != y).squeeze()  # Get indices of incorrect samples
+            incorrect_indices = incorrect_indices.tolist()
+
+            if isinstance(incorrect_indices, int):
+                incorrect_indices = [incorrect_indices]
+            incorrect_samples = [batch['video_name'][idx] for idx in incorrect_indices]
             self.epoch_logits.extend(output.logits)
-            if len(self.epoch_incorrect_samples) < 1:
-                self.epoch_incorrect_samples.extend(incorrect_samples[0])
+            for i in list(set(incorrect_samples)):
+                self.epoch_incorrect_samples.add(i)
+            
 
         
     def on_validation_epoch_end(self):
-        #dummy_input = torch.zeros((1, 8, 3, 224, 224), device=self.device)
-        #model_filename = "model_ckpt.onnx"
-        #torch.onnx.export(self, dummy_input, model_filename, opset_version=11)
-        #artifact = wandb.Artifact(name="model.ckpt", type="model")
-        #artifact.add_file(model_filename)
-        #self.logger.experiment.log_artifact(artifact)
+        dummy_input = torch.zeros((1, 8, 3, 224, 224), device=self.device)
+        model_filename = "model_ckpt.onnx"
+        torch.onnx.export(self, dummy_input, model_filename, opset_version=11)
+        artifact = wandb.Artifact(name="model.ckpt", type="model")
+        artifact.add_file(model_filename)
+        self.logger.experiment.log_artifact(artifact)
 
         flattened_logits = torch.flatten(torch.cat(self.epoch_logits))
-        incorrect_samples = self.epoch_incorrect_samples[0]
-
-        self.logger.experiment.log(
-            {"false_predictions":wandb.Video(incorrect_samples, fps=self.hparams['fps']),
-             "valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
-             "global_step": self.global_step})
         
+        wandb.log({'false_predictions':list(self.epoch_incorrect_samples)})
+        self.logger.experiment.log(
+            {"valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
+             "global_step": self.global_step})
+
         self.epoch_logits.clear()
-        self.epoch_incorrect_samples.clear()
+        self.epoch_incorrect_samples = set()
+        
 
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -122,7 +128,7 @@ class VideoClassificationLightningModule(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
             self.parameters(),
-            lr=self.args["lr"],
+            lr=self.args.lr,
         )
         return [optimizer]
 
