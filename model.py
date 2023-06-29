@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import lightning.pytorch as pl
 import torchmetrics
+import wandb
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,13 +11,19 @@ from sklearn.metrics import roc_curve, confusion_matrix, classification_report, 
 
 class VideoClassificationLightningModule(pl.LightningModule):
     def __init__(self, model, args):
-
-        self.args = args
         super().__init__()
 
+        self.args = args
         self.model = model
         self.dataloader_length = 0
         self.classes = ['Feeding', 'Grooming', 'Pumping']
+
+        self.save_hyperparameters("args.lr", "args.batch_size", "args.max_epochs",
+                                  "args.sample_rate", "args.fps", "args.num_frames")
+        
+        # For logging outputs
+        self.epoch_logits = []
+        self.epoch_incorrect_samples = []
 
     def forward(self, x):
         return self.model(x)
@@ -43,6 +50,33 @@ class VideoClassificationLightningModule(pl.LightningModule):
         )
         if stage == 'train':
             return loss
+        elif stage == 'val':
+            _, predictions = torch.max(output.logits, dim=1)
+            incorrect_samples = X[predictions != y]  # Get incorrect samples
+            self.epoch_logits.extend(output.logits)
+            if len(self.epoch_incorrect_samples) < 1:
+                self.epoch_incorrect_samples.extend(incorrect_samples[0])
+
+        
+    def on_validation_epoch_end(self):
+        #dummy_input = torch.zeros((1, 8, 3, 224, 224), device=self.device)
+        #model_filename = "model_ckpt.onnx"
+        #torch.onnx.export(self, dummy_input, model_filename, opset_version=11)
+        #artifact = wandb.Artifact(name="model.ckpt", type="model")
+        #artifact.add_file(model_filename)
+        #self.logger.experiment.log_artifact(artifact)
+
+        flattened_logits = torch.flatten(torch.cat(self.epoch_logits))
+        incorrect_samples = self.epoch_incorrect_samples[0]
+
+        self.logger.experiment.log(
+            {"false_predictions":wandb.Video(incorrect_samples, fps=self.hparams['fps']),
+             "valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
+             "global_step": self.global_step})
+        
+        self.epoch_logits.clear()
+        self.epoch_incorrect_samples.clear()
+
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         X, y = batch['video'], batch['label']

@@ -1,12 +1,15 @@
 import os
 import torch
-import lightning.pytorch as pl
-from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification, AutoImageProcessor,TimesformerForVideoClassification
-from lightning.pytorch.callbacks.progress import TQDMProgressBar
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
-from lightning.pytorch.loggers import TensorBoardLogger
 
-from utils import create_preprocessor_config
+import wandb
+
+import lightning.pytorch as pl
+from transformers import AutoImageProcessor,TimesformerForVideoClassification
+from lightning.pytorch.callbacks.progress import TQDMProgressBar
+from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
+
+from arguments import args
+from utils import create_preprocessor_config, get_timesformer_model, load_model_from_ckpt
 from model import VideoClassificationLightningModule
 from data_module import FlyDataModule
 
@@ -17,82 +20,51 @@ def main(mode = None, load_model=False):
     TRAIN_DATA_PATH = os.path.join(PROJ_DIR, 'FlyTrainingData', 'Train')
     VAL_DATA_PATH = os.path.join(PROJ_DIR, 'FlyTrainingData', 'Validation')
 
-    # MODEL INFO
-    MODEL_CHECKPOINT = {'videomae':"MCG-NJU/videomae-base",
-                        'timesformer':"facebook/timesformer-base-finetuned-k400"}
-
     # DATASET INFO
     class_labels = ['Feeding', 'Grooming', 'Pumping']
     label2id = {label: i for i, label in enumerate(class_labels)}
     id2label = {i: label for label, i in label2id.items()}
 
-    image_processor = AutoImageProcessor.from_pretrained(MODEL_CHECKPOINT['videomae'])
-
-    model = VideoMAEForVideoClassification.from_pretrained(
-        MODEL_CHECKPOINT['videomae'],
-        label2id=label2id,
-        id2label=id2label,
-        ignore_mismatched_sizes=True,  # provide this in case you're planning to fine-tune an already fine-tuned checkpoint
-        num_frames = 16 # Default is 16
-    )
-
+    # GET MODEL
+    image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
+    model = get_timesformer_model(ckpt="facebook/timesformer-base-finetuned-k400",
+                                  label2id=label2id,
+                                  id2label=id2label,
+                                  num_frames=8)
     
-    model_tformer = TimesformerForVideoClassification.from_pretrained(
-        MODEL_CHECKPOINT['timesformer'],
-        label2id=label2id,
-        id2label=id2label,
-        ignore_mismatched_sizes=True,  # provide this in case you're planning to fine-tune an already fine-tuned checkpoint
-        num_frames = 8 # Default is 8
-    )
-
-    
-
-    model_args = create_preprocessor_config(model_tformer, image_processor, sample_rate=16, fps=30)
-
-    args = {
-        # Data
-        "train_data_path" : TRAIN_DATA_PATH,
-        "val_data_path" : VAL_DATA_PATH,
-        "lr" : 0.001,
-        "max_epochs" : 25,
-        "batch_size" : 16,
-        "video_path_prefix" : '',
-        "video_min_short_side_scale" : 256,
-        "video_max_short_side_scale" : 320,
-        "clip_duration" : model_args["clip_duration"],
-        "crop_size" : model_args["crop_size"],
-        "num_frames_to_sample": model_args["num_frames_to_sample"],
-        "video_means" : model_args["image_mean"],
-        "video_stds" : model_args["image_std"]
-    }
-
-    # Freeze the model
-    for param in model.videomae.parameters():
-        param.requires_grad = False
-    
-    for param in model_tformer.timesformer.parameters():
+    # Freeze the model    
+    for param in model.timesformer.parameters():
         param.requires_grad = False
 
-    logger = TensorBoardLogger("tb_logs", name="timesformer_logs_s16_noES_b16_lr1e3")
+
+    # Create Arguments
+    model_args = create_preprocessor_config(model, 
+                                            image_processor, 
+                                            sample_rate=args.sample_rate, 
+                                            fps=args.fps)
+    for key, value in model_args.items():
+        setattr(args, key, value)
+
+
+
+    #logger = TensorBoardLogger("tb_logs", name="timesformer_logs_s16_noES_b16_lr1e3")
+    wandb_logger = WandbLogger(project="timesformer-wandb")
 
     trainer = pl.Trainer(
-        max_epochs=25,
-        logger=logger,
-        callbacks=[TQDMProgressBar(refresh_rate=args["batch_size"])],
+        max_epochs=args.max_epochs,
+        logger=wandb_logger,
+        callbacks=[TQDMProgressBar(refresh_rate=args.batch_size)],
         accelerator="gpu" if torch.cuda.is_available() else "auto",
         devices=1 if torch.cuda.is_available() else None,
         log_every_n_steps=40
     )
 
     if load_model:
-        state_dict_model = torch.load("tb_logs/timesformer_logs_s16_noES_b16_lr1e3/version_0/checkpoints/epoch=24-step=1000.ckpt")['state_dict']
-        for key in list(state_dict_model.keys()):
-            state_dict_model[key.replace('model.', '')] = state_dict_model.pop(key)
-
-        model_tformer.load_state_dict(state_dict_model)
-        classification_module = VideoClassificationLightningModule(model_tformer, args)
+        saved_ckpt = "tb_logs/timesformer_logs_s16_noES_b16_lr1e3/version_0/checkpoints/epoch=24-step=1000.ckpt"
+        model = load_model_from_ckpt(model, saved_ckpt)
+        classification_module = VideoClassificationLightningModule(model, args)
     else:
-        classification_module = VideoClassificationLightningModule(model_tformer, args)
+        classification_module = VideoClassificationLightningModule(model, args)
     data_module = FlyDataModule(args)
 
     if mode is None:
