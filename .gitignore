@@ -6,3 +6,7 @@ __pycache__
 tb_logs
 Figures
 Peak_Signal_Data
+wandb
+timesformer-wandb
+fly_cm.png
+fly_roc.png

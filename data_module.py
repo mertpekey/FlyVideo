@@ -35,20 +35,20 @@ class FlyDataModule(pl.LightningDataModule):
 
             self.train_dataset = LimitDataset(
                 pytorchvideo.data.labeled_video_dataset(
-                    data_path=self.args["train_data_path"],
-                    clip_sampler=pytorchvideo.data.make_clip_sampler('uniform', self.args["clip_duration"]), # Experiment olarak random da denenebilir
+                    data_path=self.args.train_data_path,
+                    clip_sampler=pytorchvideo.data.make_clip_sampler('uniform', self.args.clip_duration), # Experiment olarak random da denenebilir
                     transform=train_transform,
-                    video_path_prefix=self.args["video_path_prefix"], # could be '' I think
+                    video_path_prefix=self.args.video_path_prefix, # could be '' I think
                     decode_audio=False
                 )
             )
 
             self.val_dataset = LimitDataset(
                 pytorchvideo.data.labeled_video_dataset(
-                    data_path=self.args["val_data_path"],
-                    clip_sampler=pytorchvideo.data.make_clip_sampler('uniform', self.args["clip_duration"]), # Experiment olarak random da denenebilir
+                    data_path=self.args.val_data_path,
+                    clip_sampler=pytorchvideo.data.make_clip_sampler('uniform', self.args.clip_duration), # Experiment olarak random da denenebilir
                     transform=val_transform,
-                    video_path_prefix=self.args["video_path_prefix"], # could be '' I think
+                    video_path_prefix=self.args.video_path_prefix, # could be '' I think
                     decode_audio=False
                 )
         )
@@ -56,7 +56,7 @@ class FlyDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         return torch.utils.data.DataLoader(
             self.train_dataset,
-            batch_size=self.args["batch_size"],
+            batch_size=self.args.batch_size,
             shuffle=True,
             num_workers=8
         )
@@ -64,7 +64,7 @@ class FlyDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return torch.utils.data.DataLoader(
             self.val_dataset,
-            batch_size=self.args["batch_size"],
+            batch_size=self.args.batch_size,
             shuffle=False,
             num_workers=8
         )
@@ -79,22 +79,22 @@ class FlyDataModule(pl.LightningDataModule):
             key="video",
             transform=Compose(
                 [
-                    UniformTemporalSubsample(self.args["num_frames_to_sample"]),
+                    UniformTemporalSubsample(self.args.num_frames_to_sample),
                     Lambda(lambda x: x / 255.0),
-                    Normalize(self.args["video_means"], self.args["video_stds"]),
+                    Normalize(self.args.video_means, self.args.video_stds),
                 ]
                 + (
                     [
                         RandomShortSideScale(
-                            min_size=self.args["video_min_short_side_scale"],
-                            max_size=self.args["video_max_short_side_scale"],
+                            min_size=self.args.video_min_short_side_scale,
+                            max_size=self.args.video_max_short_side_scale,
                         ),
-                        RandomCrop(self.args["crop_size"]),
+                        RandomCrop(self.args.crop_size),
                     ]
                     if mode == "train"
                     else [
-                        ShortSideScale(self.args["video_min_short_side_scale"]),
-                        CenterCrop(self.args["crop_size"]),
+                        ShortSideScale(self.args.video_min_short_side_scale),
+                        CenterCrop(self.args.crop_size),
                     ]
                 )
             ),
