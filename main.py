@@ -4,9 +4,10 @@ import torch
 import wandb
 
 import lightning.pytorch as pl
-from transformers import AutoImageProcessor,TimesformerForVideoClassification
+from transformers import AutoImageProcessor
 from lightning.pytorch.callbacks.progress import TQDMProgressBar
-from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
+from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
 
 from arguments import args
 from utils import create_preprocessor_config, get_timesformer_model, load_model_from_ckpt
@@ -46,13 +47,19 @@ def main(mode = None, load_model=False):
         setattr(args, key, value)
 
 
-    #logger = TensorBoardLogger("tb_logs", name="timesformer_logs_s16_noES_b16_lr1e3")
+    # Lightning Callbacks
     wandb_logger = WandbLogger(project="timesformer-wandb")
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val_loss",
+        mode="max",
+        dirpath="./wandb_checkpoints",
+        filename=f"timesformer_b{args.batch_size}_lr{args.lr}",
+    )
 
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
         logger=wandb_logger,
-        callbacks=[TQDMProgressBar(refresh_rate=args.batch_size)],
+        callbacks=[TQDMProgressBar(refresh_rate=args.batch_size), checkpoint_callback],
         accelerator="gpu" if torch.cuda.is_available() else "auto",
         devices=1 if torch.cuda.is_available() else None,
         log_every_n_steps=40

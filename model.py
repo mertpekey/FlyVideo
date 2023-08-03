@@ -6,6 +6,7 @@ import torchmetrics
 import wandb
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, confusion_matrix, classification_report, auc, ConfusionMatrixDisplay
 
@@ -43,10 +44,10 @@ class VideoClassificationLightningModule(pl.LightningModule):
         acc = torchmetrics.functional.accuracy(output.logits, y, task="multiclass", num_classes=3)
 
         self.log(
-            f"{stage}/loss", loss.item(), batch_size=self.args.batch_size, on_step=False, on_epoch=True, prog_bar=True
+            f"{stage}_loss", loss.item(), batch_size=self.args.batch_size, on_step=False, on_epoch=True, prog_bar=True
         )
         self.log(
-            f"{stage}/acc", acc, batch_size=self.args.batch_size, on_step=False, on_epoch=True, prog_bar=True
+            f"{stage}_acc", acc, batch_size=self.args.batch_size, on_step=False, on_epoch=True, prog_bar=True
         )
         if stage == 'train':
             return loss
@@ -65,16 +66,17 @@ class VideoClassificationLightningModule(pl.LightningModule):
 
         
     def on_validation_epoch_end(self):
-        dummy_input = torch.zeros((1, 8, 3, 224, 224), device=self.device)
-        model_filename = "model_ckpt.onnx"
-        torch.onnx.export(self, dummy_input, model_filename, opset_version=11)
-        artifact = wandb.Artifact(name="model.ckpt", type="model")
-        artifact.add_file(model_filename)
-        self.logger.experiment.log_artifact(artifact)
+        #dummy_input = torch.zeros((1, 8, 3, 224, 224), device=self.device)
+        #model_filename = "model_ckpt.onnx"
+        #torch.onnx.export(self, dummy_input, model_filename, opset_version=11)
+        #artifact = wandb.Artifact(name="model.ckpt", type="model")
+        #artifact.add_file(model_filename)
+        #self.logger.experiment.log_artifact(artifact)
 
         flattened_logits = torch.flatten(torch.cat(self.epoch_logits))
         
-        wandb.log({'false_predictions':list(self.epoch_incorrect_samples)})
+        incorrect_sample_df = pd.DataFrame({'false_predictions':list(self.epoch_incorrect_samples)})
+        self.logger.log_text(key="incorrect_preds", dataframe=incorrect_sample_df)
         self.logger.experiment.log(
             {"valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
              "global_step": self.global_step})
