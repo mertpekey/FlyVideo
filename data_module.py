@@ -51,7 +51,16 @@ class FlyDataModule(pl.LightningDataModule):
                     video_path_prefix=self.args.video_path_prefix, # could be '' I think
                     decode_audio=False
                 )
-        )
+            )
+        elif stage == 'inference':
+            val_transform = self._make_transforms(mode="val")
+            self.inference_dataset = pytorchvideo.data.labeled_video_dataset(
+                    data_path=self.args.inference_data_path,
+                    clip_sampler=pytorchvideo.data.make_clip_sampler('uniform', self.args.clip_duration), # Experiment olarak random da denenebilir
+                    transform=val_transform,
+                    video_path_prefix=self.args.video_path_prefix, # could be '' I think
+                    decode_audio=False
+                )
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(
@@ -69,6 +78,12 @@ class FlyDataModule(pl.LightningDataModule):
             num_workers=8
         )
     
+    def _inference_dataloader(self):
+        return torch.utils.data.DataLoader(
+            self.inference_dataset,
+            batch_size=self.args.batch_size,
+            shuffle=False
+        )
 
     def _make_transforms(self, mode: str):
         return Compose([self._video_transform(mode)])
