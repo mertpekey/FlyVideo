@@ -38,10 +38,13 @@ class VideoClassificationLightningModule(pl.LightningModule):
     def _common_step(self, batch, batch_idx, stage='train'):
         X, y = batch['video'], batch['label']
 
-        output = self(X.permute(0, 2, 1, 3, 4)) # (8, 3, 16, 224, 224) -> (8, 16, 3, 224, 224)
-
-        loss = F.cross_entropy(output.logits, y)
-        acc = torchmetrics.functional.accuracy(output.logits, y, task="multiclass", num_classes=3)
+        output = self(X.permute(0, 2, 1, 3, 4)) # (16, 3, 16, 224, 224) -> (16, 16, 3, 224, 224)
+        if isinstance(output, torch.Tensor):
+            logits = output
+        else:
+            logits = output.logits
+        loss = F.cross_entropy(logits, y)
+        acc = torchmetrics.functional.accuracy(logits, y, task="multiclass", num_classes=3)
 
         self.log(
             f"{stage}_loss", loss.item(), batch_size=self.args.batch_size, on_step=False, on_epoch=True, prog_bar=True
@@ -52,47 +55,45 @@ class VideoClassificationLightningModule(pl.LightningModule):
         if stage == 'train':
             return loss
         elif stage == 'val':
-            predictions = torch.argmax(output.logits, dim=1)
+            predictions = torch.argmax(logits, dim=1)
             incorrect_indices = torch.nonzero(predictions != y).squeeze()  # Get indices of incorrect samples
             incorrect_indices = incorrect_indices.tolist()
 
-            if isinstance(incorrect_indices, int):
-                incorrect_indices = [incorrect_indices]
-            incorrect_samples = [batch['video_name'][idx] for idx in incorrect_indices]
-            self.epoch_logits.extend(output.logits)
-            for i in list(set(incorrect_samples)):
-                self.epoch_incorrect_samples.add(i)
+            if self.current_epoch == self.args.max_epochs - 1:
+                if isinstance(incorrect_indices, int):
+                    incorrect_indices = [incorrect_indices]
+                incorrect_samples = [batch['video_name'][idx] for idx in incorrect_indices]
+                self.epoch_logits.extend(logits)
+                for i in list(set(incorrect_samples)):
+                    self.epoch_incorrect_samples.add(i)
             
 
         
     def on_validation_epoch_end(self):
-        #dummy_input = torch.zeros((1, 8, 3, 224, 224), device=self.device)
-        #model_filename = "model_ckpt.onnx"
-        #torch.onnx.export(self, dummy_input, model_filename, opset_version=11)
-        #artifact = wandb.Artifact(name="model.ckpt", type="model")
-        #artifact.add_file(model_filename)
-        #self.logger.experiment.log_artifact(artifact)
+        if self.current_epoch == self.args.max_epochs - 1:
+            flattened_logits = torch.flatten(torch.cat(self.epoch_logits))
+            
+            incorrect_sample_df = pd.DataFrame({'false_predictions':list(self.epoch_incorrect_samples)})
+            self.logger.log_text(key="incorrect_preds", dataframe=incorrect_sample_df)
+            self.logger.experiment.log(
+                {"valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
+                "global_step": self.global_step})
 
-        flattened_logits = torch.flatten(torch.cat(self.epoch_logits))
-        
-        incorrect_sample_df = pd.DataFrame({'false_predictions':list(self.epoch_incorrect_samples)})
-        self.logger.log_text(key="incorrect_preds", dataframe=incorrect_sample_df)
-        self.logger.experiment.log(
-            {"valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
-             "global_step": self.global_step})
-
-        self.epoch_logits.clear()
-        self.epoch_incorrect_samples = set()
+            self.epoch_logits.clear()
+            self.epoch_incorrect_samples = set()
         
 
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         X, y = batch['video'], batch['label']
         output = self(X.permute(0, 2, 1, 3, 4))
-
+        if isinstance(output, torch.Tensor):
+            logits = output
+        else:
+            logits = output.logits
         # Convert the predicted probabilities to class predictions
-        y_pred = torch.argmax(output.logits, dim=1)
-        y_prob = torch.softmax(output.logits, dim=1)
+        y_pred = torch.argmax(logits, dim=1)
+        y_prob = torch.softmax(logits, dim=1)
         y_probs = y_prob.cpu().numpy()
 
         if batch_idx == 0:
