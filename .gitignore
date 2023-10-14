@@ -1,14 +1,25 @@
-Dataset
-FlyTrainingData
+# Compiled Python files
+*.pyc
+*.pyo
+__pycache__/
+
+# macOS system files
 .DS_Store
 ./.DS_Store
-__pycache__
-tb_logs
-Figures
-Peak_Signal_Data
-Prediction_Data
-wandb
-timesformer-wandb
-fly_cm.png
-fly_roc.png
-wandb_checkpoints
+
+# Logs and temporary files
+*.log
+*.tmp
+wandb/
+tb_logs/
+wandb_checkpoints/
+
+# Data and model directories
+Dataset/
+FlyTrainingData/
+peak_detection/data/
+peak_detection/figures/
+supplementary_files/figures/
+
+# IDE-specific files and directories
+.vscode/

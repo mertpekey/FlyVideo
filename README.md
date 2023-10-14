@@ -29,21 +29,21 @@ To run inference using the provided `inference.py` file, follow these steps:
     git clone https://github.com/mertpekey/FruitFlyVideo.git
     ```
 
-2. Create a directory named `Prediction_Data`, and inside that directory, create a `Test` folder. Place the videos you want to make inferences on inside the `Test` folder. You can modify the folder structure and image names if needed.
+2. Create a directory named `inference_data`, and inside that directory, create a `test` folder. Place the videos you want to make inferences on inside the `test` folder. You can modify the folder structure and image names if needed.
 
-3. Create a directory named `Pretrained_Model`, and download the pretrained model inside that folder. Change the name of the file to `pretrained_model.ckpt`. Or you can define it using `--model_name` argument.
+3. Create a directory named `pretrained_weights`, and download the pretrained model inside that folder. Change the name of the file to `pretrained_model.ckpt`. Or you can define it using `--model_name` argument.
 
 4. Run the inference script with the following command:
 
     ```bash
-    python inference.py --inference_data_path 'Prediction_Data' --batch_size 1 --device cuda --load_ckpt True
+    python inference.py --inference_data_path 'inference_data' --batch_size 1 --device cuda --load_ckpt
     ```
 
-   - `--inference_data_path`: Path to the `Prediction_Data` folder.
+   - `--inference_data_path`: Path to the `inference_data` folder.
    - `--batch_size`: (Optional) Set the batch size for inference (default: 1).
    - `--device`: (Optional) Set the device to run inference on (e.g., `cuda` or `cpu`).
-   - `--load_ckpt`: (Optional) Use this flag to indicate using a finetuned model (default: True).
-   - `--model_name`: (Optional) Use this to determine which pretrained checkpoints will be used (default: pretrained_model.ckpt).
+   - `--load_ckpt`: (Optional) Use this flag to indicate using a finetuned model.
+   - `--pretrained_model_path`: (Optional) Use this to determine which pretrained checkpoints will be used (default: pretrained_model.ckpt).
 
 4. The inference script will generate a `prediction.json` output file in the project directory, containing the inference results.
 

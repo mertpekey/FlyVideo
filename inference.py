@@ -10,14 +10,14 @@ from data_module import FlyDataModule
 
 ## Arguments
 
-INFERENCE_PATH = 'Prediction_Data'
+INFERENCE_PATH = 'inference_data'
 parser = argparse.ArgumentParser(description="Enter Arguments for Video Fly")
-parser.add_argument("--model_name", type=str, default='pretrained_model.ckpt', help="Filename of Pretrained Model")
 parser.add_argument("--inference_data_path", type=str, default=INFERENCE_PATH, help="Path to inference data folder")
 parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
 parser.add_argument("--video_path_prefix", type=str, default="", help="Prefix for video paths")
 parser.add_argument("--device", type=str, default="cuda", help="Device")
-parser.add_argument("--load_ckpt", type=bool, default=True, help="Load finetuned model or not")
+parser.add_argument("--load_ckpt", action="store_true", help="Load finetuned model or not")
+parser.add_argument("--pretrained_model_path", type=str, default='pretrained_model.ckpt', help="Filename of Pretrained Model")
 args = parser.parse_args()
 
 device = torch.device(args.device)
@@ -46,7 +46,7 @@ for key, value in model_args.items():
 
 # Load model checkpoints
 if args.load_ckpt:
-    saved_ckpt = f"Pretrained_Model/{args.model_name}"
+    saved_ckpt = f"pretrained_weights/{args.pretrained_model_path}"
     model = load_model_from_ckpt(model, saved_ckpt)
     print('Model Loaded!')
 
