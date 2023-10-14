@@ -42,8 +42,8 @@ def create_fly_database(true_peak_annotations_df):
 ######## Feature Engineering ########
 
 def add_mv_stats(df):
-    df['moving_avg'] = df['distance.origin-prob'].rolling(window=10).mean()
-    df['moving_std'] = df['distance.origin-prob'].rolling(window=10).std()
+    df['moving_avg'] = df['distance.origin-prob'].rolling(window=60).mean()
+    df['moving_std'] = df['distance.origin-prob'].rolling(window=60).std()
     
     # fill NaN values with its corresponding row value
     df['moving_avg'].fillna(df['distance.origin-prob'], inplace=True)
@@ -84,6 +84,7 @@ def get_model_prediction(fly, config, bouts_dict):
     if config['add_golay']:
         from scipy.signal import savgol_filter
         golay_cols = ['pose.thor_post_x', 'pose.thor_post_y']
+        #golay_cols = ['distance.origin-prob']
         for col in golay_cols:
             feat = bouts_dict[fly.name][col][int(fly.trial_id)]
             info_df[f'gol_{col}'] = savgol_filter(x = feat, window_length=len(feat), polyorder=5, axis=0)
